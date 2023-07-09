@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { OpenAIEmbeddings } from 'langchain/embeddings';
-import { PineconeStore } from 'langchain/vectorstores';
+import { OpenAIEmbeddings } from 'langchain/embeddings/openai';
+import { PineconeStore } from 'langchain/vectorstores/pinecone';
 import { makeChain } from '@/utils/makechain';
 import { pinecone } from '@/utils/pinecone-client';
 
@@ -21,10 +21,8 @@ export default async function handler(
 
   /* create vectorstore*/
   const vectorStore = await PineconeStore.fromExistingIndex(
-    index,
-    new OpenAIEmbeddings({}),
-    'text',
-    currentNamespace, //optional namespace
+    new OpenAIEmbeddings(),
+    { pineconeIndex: index },
   );
 
   res.writeHead(200, {

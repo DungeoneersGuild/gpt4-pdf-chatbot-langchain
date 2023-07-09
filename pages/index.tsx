@@ -1,8 +1,7 @@
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import Layout from '@/components/layout';
 import styles from '@/styles/Home.module.css';
 import { Message } from '@/types/chat';
-import { fetchEventSource } from '@microsoft/fetch-event-source';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import LoadingDots from '@/components/ui/LoadingDots';
@@ -25,7 +24,6 @@ export default function Home() {
   console.log('currentNamespace', currentNamespace);
   console.log('currentIndex', currentIndex);
   const [loading, setLoading] = useState<boolean>(false);
-  const [sourceDocs, setSourceDocs] = useState<Document[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [messageState, setMessageState] = useState<{
     messages: Message[];
@@ -40,10 +38,9 @@ export default function Home() {
       },
     ],
     history: [],
-    pendingSourceDocs: [],
   });
 
-  const { messages, pending, history, pendingSourceDocs } = messageState;
+  const { messages, history } = messageState;
 
   useEffect(() => {
     //update messageState when PINECONE_NAME_SPACE changes
@@ -88,17 +85,13 @@ export default function Home() {
           message: question,
         },
       ],
-      pending: undefined,
     }));
 
     setLoading(true);
     setQuery('');
-    setMessageState((state) => ({ ...state, pending: '' }));
-
-    const ctrl = new AbortController();
 
     try {
-      fetchEventSource('/api/chat', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -109,40 +102,32 @@ export default function Home() {
           currentNamespace,
           currentIndex,
         }),
-        signal: ctrl.signal,
-        onmessage: (event) => {
-          if (event.data === '[DONE]') {
-            setMessageState((state) => ({
-              history: [...state.history, [question, state.pending ?? '']],
-              messages: [
-                ...state.messages,
-                {
-                  type: 'apiMessage',
-                  message: state.pending ?? '',
-                  sourceDocs: state.pendingSourceDocs,
-                },
-              ],
-              pending: undefined,
-              pendingSourceDocs: undefined,
-            }));
-            setLoading(false);
-            ctrl.abort();
-          } else {
-            const data = JSON.parse(event.data);
-            if (data.sourceDocs) {
-              setMessageState((state) => ({
-                ...state,
-                pendingSourceDocs: data.sourceDocs,
-              }));
-            } else {
-              setMessageState((state) => ({
-                ...state,
-                pending: (state.pending ?? '') + data.data,
-              }));
-            }
-          }
-        },
       });
+      const data = await response.json();
+      console.log('data', data);
+
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setMessageState((state) => ({
+          ...state,
+          messages: [
+            ...state.messages,
+            {
+              type: 'apiMessage',
+              message: data.text,
+              sourceDocs: data.sourceDocuments,
+            },
+          ],
+          history: [...state.history, [question, data.text]],
+        }));
+      }
+      console.log('messageState', messageState);
+
+      setLoading(false);
+
+      //scroll to bottom
+      messageListRef.current?.scrollTo(0, messageListRef.current.scrollHeight);
     } catch (error) {
       setLoading(false);
       setError('An error occurred while fetching the data. Please try again.');
@@ -151,38 +136,13 @@ export default function Home() {
   }
 
   //prevent empty submissions
-  const handleEnter = useCallback(
-    (e: any) => {
-      if (e.key === 'Enter' && query) {
-        handleSubmit(e);
-      } else if (e.key == 'Enter') {
-        e.preventDefault();
-      }
-    },
-    [query],
-  );
-
-  const chatMessages = useMemo(() => {
-    return [
-      ...messages,
-      ...(pending
-        ? [
-            {
-              type: 'apiMessage',
-              message: pending,
-              sourceDocs: pendingSourceDocs,
-            },
-          ]
-        : []),
-    ];
-  }, [messages, pending, pendingSourceDocs]);
-
-  //scroll to bottom of chat
-  useEffect(() => {
-    if (messageListRef.current) {
-      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+  const handleEnter = (e: any) => {
+    if (e.key === 'Enter' && query) {
+      handleSubmit(e);
+    } else if (e.key == 'Enter') {
+      e.preventDefault();
     }
-  }, [chatMessages]);
+  };
 
   return (
     <>
@@ -194,12 +154,13 @@ export default function Home() {
           <main className={styles.main}>
             <div className={styles.cloud}>
               <div ref={messageListRef} className={styles.messagelist}>
-                {chatMessages.map((message, index) => {
+                {messages.map((message, index) => {
                   let icon;
                   let className;
                   if (message.type === 'apiMessage') {
                     icon = (
                       <Image
+                        key={index}
                         src="/bot-image.png"
                         alt="AI"
                         width="40"
@@ -212,6 +173,7 @@ export default function Home() {
                   } else {
                     icon = (
                       <Image
+                        key={index}
                         src="/usericon.png"
                         alt="Me"
                         width="30"
@@ -222,7 +184,7 @@ export default function Home() {
                     );
                     // The latest message sent by the user will be animated while waiting for a response
                     className =
-                      loading && index === chatMessages.length - 1
+                      loading && index === messages.length - 1
                         ? styles.usermessagewaiting
                         : styles.usermessage;
                   }
@@ -237,7 +199,10 @@ export default function Home() {
                         </div>
                       </div>
                       {message.sourceDocs && (
-                        <div className="p-5">
+                        <div
+                          className="p-5"
+                          key={`sourceDocsAccordion-${index}`}
+                        >
                           <Accordion
                             type="single"
                             collapsible
@@ -266,26 +231,6 @@ export default function Home() {
                     </>
                   );
                 })}
-                {sourceDocs.length > 0 && (
-                  <div className="p-5">
-                    <Accordion type="single" collapsible className="flex-col">
-                      {sourceDocs.map((doc, index) => (
-                        <div key={`sourceDocs-${index}`}>
-                          <AccordionItem value={`item-${index}`}>
-                            <AccordionTrigger>
-                              <h3>Source {index + 1}</h3>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                              <ReactMarkdown linkTarget="_blank">
-                                {doc.pageContent}
-                              </ReactMarkdown>
-                            </AccordionContent>
-                          </AccordionItem>
-                        </div>
-                      ))}
-                    </Accordion>
-                  </div>
-                )}
               </div>
             </div>
             <div className={styles.center}>

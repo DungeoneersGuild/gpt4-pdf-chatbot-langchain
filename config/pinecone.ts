@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 /* Change this to your Pinecone index name. Index name can only contain lowercase letters, numbers, and hyphens. Cannot be more than 45 characters.*/
-export const PINECONE_INDEX_NAME = 'random-topics';
+export const PINECONE_INDEX_NAME = 'byl';
 
 /* Change, remove, or add topics here. Any topics listed here will be selectable
  by users in the navigation bar. 
@@ -26,6 +26,11 @@ export const TOPICS = [
     TOPIC: 'Supreme Court Cases',
     NAMESPACE: 'supreme-court-cases', // MUST ONLY CONTAIN LOWER CASE LETTERS A-Z AND HYPHENS
     PROMPT: 'What precedent was set by Morse v. Frederick?',
+  },
+  {
+    TOPIC: 'Dungeons and Dragons',
+    NAMESPACE: 'd-n-d', // MUST ONLY CONTAIN LOWER CASE LETTERS A-Z AND HYPHENS
+    PROMPT: 'Learn about a game...',
   },
 ];
 

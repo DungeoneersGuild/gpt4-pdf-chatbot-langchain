@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
-import { OpenAIEmbeddings } from 'langchain/embeddings';
-import { PineconeStore } from 'langchain/vectorstores';
+import { OpenAIEmbeddings } from 'langchain/embeddings/openai';
+import { PineconeStore } from 'langchain/vectorstores/pinecone';
 import { pinecone } from '@/utils/pinecone-client';
-import { PDFLoader } from 'langchain/document_loaders';
+import { PDFLoader, TextLoader, DocxLoader } from 'langchain/document_loaders';
 import { PINECONE_INDEX_NAME } from '@/config/pinecone';
 
 export const run = async () => {
@@ -19,11 +19,11 @@ export const run = async () => {
     console.log('directories: ', directories);
     for (const directory of directories) {
       /* Load all PDF files in the directory */
-      const files = fs
+      const pdfs = fs
         .readdirSync(directory)
         .filter((file) => path.extname(file) === '.pdf');
 
-      for (const file of files) {
+      for (const file of pdfs) {
         console.log(`Processing file: ${file}`);
 
         /* Load raw docs from the pdf file */
@@ -45,8 +45,8 @@ export const run = async () => {
         console.log('creating vector store...');
         /*create and store the embeddings in the vectorStore*/
         const embeddings = new OpenAIEmbeddings();
-        const index = pinecone.Index(PINECONE_INDEX_NAME); 
-        const namespace = path.basename(directory); // use the directory name as the namespace 
+        const index = pinecone.Index(PINECONE_INDEX_NAME);
+        const namespace = path.basename(directory); // use the directory name as the namespace
 
         //embed the PDF documents
 
@@ -55,13 +55,10 @@ export const run = async () => {
         for (let i = 0; i < docs.length; i += chunkSize) {
           const chunk = docs.slice(i, i + chunkSize);
           console.log('chunk', i, chunk);
-          await PineconeStore.fromDocuments(
-            index,
-            chunk,
-            embeddings,
-            'text',
-            namespace,
-          );
+          await PineconeStore.fromDocuments(docs, embeddings, {
+            pineconeIndex: index,
+            namespace: namespace,
+          });
         }
 
         console.log(`File ${file} processed`);
