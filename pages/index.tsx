@@ -263,6 +263,7 @@ export default function Home() {
         <footer className="m-auto p-4">
           <a href="https://twitter.com/dungeoneersfeed">
             Demo powered by LangChainAI & OpenAI.
+            </a>
         </footer>
       </Layout>
     </>
